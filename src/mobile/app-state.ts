@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-export type MobileView = 'list' | 'chat' | 'results'
+export type MobileView = 'list' | 'chat' | 'results' | 'studio'
 interface Navigation { view: MobileView; history: boolean }
 export interface ChatPosition { mode?: 'messages' | 'terminal'; top?: number; follow?: boolean; terminalLine?: number; terminalFollow?: boolean; terminalView?: TerminalView }
 export type TerminalView = 'wrap' | 'fit' | 'actual'
@@ -9,7 +9,8 @@ function read(key: string): unknown { try { return JSON.parse(localStorage.getIt
 function save(key: string, value: unknown) { try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* Keep in-memory navigation when storage is unavailable. */ } }
 function initialNavigation(): Navigation {
   const value = read(navigationKey) as Partial<Navigation> | null
-  if (value && ['list', 'chat', 'results'].includes(value.view || '') && typeof value.history === 'boolean') return { view: value.view!, history: value.history }
+  if (location.hash === '#studio') return { view: 'studio', history: false }
+  if (value && ['list', 'chat', 'results', 'studio'].includes(value.view || '') && typeof value.history === 'boolean') return { view: value.view!, history: value.history }
   return { view: localStorage.getItem('mrmak.mobile.selected') ? 'chat' : 'list', history: false }
 }
 let navigation = initialNavigation()

@@ -30,6 +30,12 @@ working. Ask for missing personal preferences; do not invent a biography.
 - Before committing or publishing, review the selected files for personal data,
   credentials, unintended media and unrelated changes.
 
+## Studio projects
+
+A game project with a `studio/` folder is run through its board. Use the
+`studio-protocol` skill there: start, log and finish tasks with the Studio CLI,
+open gates for decisions that belong to the owner, and never decide them.
+
 ## First setup
 
 Follow `docs/getting-started.md`. Check the machine and the user's chosen route
@@ -46,3 +52,4 @@ read the sample cards.
 `knowledge/`: lessons.
 `context/`: the owner's optional preferences and goals.
 `inbox/`: incoming references.
+`scripts/studio/`, `desktop/service/studio/`: Studio board, hooks and autopilot (see `docs/studio.md`).

@@ -67,6 +67,16 @@ Codex 0.163 chats are supported: Mr. Mak starts Codex with `--no-daemon` when
 the installed version offers it, so every chat stays linked to its conversation,
 and a chat follows a rewind or a `/new` made in its terminal.
 
+## Studio for game projects
+
+Studio turns a game folder into a board your agents work through: you give a
+goal, the Producer drafts a plan for your approval, and the autopilot runs
+each task in a visible Claude Code chat. Design, art, canon, merges to main
+and exports wait for your decision, enforced by hooks rather than prompts.
+Every action lands in `studio/log/`, decisions in `studio/decisions/`, and a
+digest arrives each evening, with optional ntfy push alerts to your phone.
+See [Studio](docs/studio.md).
+
 ## Projects and long chats
 
 **New chat** lists the folders you have worked in: the Workspace, projects

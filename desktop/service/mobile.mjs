@@ -25,8 +25,8 @@ const DEVICE_TTL = 180 * 24 * 60 * 60 * 1000;
 const send = (ws, value) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); };
 
 export class MobileGateway {
-  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo), transcripts = new ConversationTranscripts() }) {
-    Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, transport });
+  constructor({ repo, uiDir, stateDir, sessions, attachments, settings, changed, closeChat, studio = null, transport = new TailscaleTransport(), dictation = new MobileDictation(repo), chooseDictation, readAloud = new LocalReadAloud(repo), transcripts = new ConversationTranscripts() }) {
+    Object.assign(this, { repo, uiDir, sessions, attachments, settings, changed, closeChat, studio, transport });
     this.file = path.join(stateDir, 'mobile-access.json');
     this.saves = Promise.resolve(); this.pending = new Map(); this.clients = new Set(); this.inflight = new Map(); this.uploads = new Map(); this.queues = new Map();
     this.transcripts = transcripts; this.conversationMedia = new ConversationMedia(); this.active = false; this.error = ''; this.origin = ''; this.rate = { at: Date.now(), count: 0 };
@@ -277,6 +277,18 @@ export class MobileGateway {
           const image = await this.attachments.save(Buffer.concat(chunks), decodeURIComponent(request.headers['x-file-name'] || 'Phone image'));
           const id = randomUUID(); this.uploads.set(id, { ...image, deviceId: device.id, expires: Date.now() + 24 * 60 * 60 * 1000 });
           return json(response, 201, { id, name: image.name });
+        }
+        if (route.startsWith('/mobile/api/studio')) {
+          if (!this.studio) fail('Studio is not available.', 404);
+          const project = url.searchParams.get('project') || data.project;
+          // The phone can decide gates, start a goal and pause the autopilot; project setup stays on the computer.
+          if (method === 'GET' && route === '/mobile/api/studio') return json(response, 200, await this.studio.list());
+          if (method === 'GET' && route === '/mobile/api/studio/state') return json(response, 200, await this.studio.state(project));
+          if (method === 'GET' && route === '/mobile/api/studio/detail') return json(response, 200, await this.studio.detail(project, url.searchParams.get('kind'), url.searchParams.get('id')));
+          if (method === 'POST' && route === '/mobile/api/studio/decide') return json(response, 200, await this.studio.decide(project, data.gate, data.decision, data.note));
+          if (method === 'POST' && route === '/mobile/api/studio/autopilot') return json(response, 200, await this.studio.setAutopilot(project, { enabled: data.enabled === true }));
+          if (method === 'POST' && route === '/mobile/api/studio/goal') return json(response, 201, await this.studio.goal(project, data.text));
+          fail('Studio action not found', 404);
         }
         if (method === 'GET' && route === '/mobile/api/projects') return json(response, 200, await this.projects());
         if (method === 'POST' && route === '/mobile/api/sessions') {

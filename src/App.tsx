@@ -8,11 +8,16 @@ import Topbar from './components/Topbar'
 import HomeGrid from './components/HomeGrid'
 import EntityControls from './components/EntityControls'
 import ReportBoundary from './components/ReportBoundary'
-import { contentUrl, isDesktop } from './desktop/client'
+import { api, contentUrl, isDesktop, onServiceEvent } from './desktop/client'
 
 const Compare3D = lazy(() => import('./components/Compare3D'))
 const ReportViewer = lazy(() => import('./components/ReportViewer'))
 const EditableCard = lazy(() => import('./components/EditableCard'))
+const StudioBoard = lazy(() => import('./components/StudioBoard'))
+
+const studioCall = <T,>(path: string, data?: unknown) => api<T>(`/studio${path}`, data)
+const studioSubscribe = (refresh: () => void) => onServiceEvent(event => { if (event.type === 'studio') refresh() })
+const openChat = (id: string) => { void api(`/sessions/${encodeURIComponent(id)}/focus`, {}) }
 
 // Freshly-touched work always burns at the top: sort by `updated` (falls back
 // to `created`), regardless of status — a report Mak just edited must not sink
@@ -72,8 +77,8 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    document.title = entity ? `Mr. Mak — ${entity.title}` : 'Mr. Mak — Workspace'
-  }, [entity])
+    document.title = route.id === 'studio' ? 'Mr. Mak — Studio' : entity ? `Mr. Mak — ${entity.title}` : 'Mr. Mak — Workspace'
+  }, [entity, route.id])
 
   const goHome = useCallback(() => {
     history.pushState(null, '', window.location.pathname + window.location.search)
@@ -166,7 +171,9 @@ export default function App() {
 
         <div className="content">
           <ReportBoundary key={reportUrl || 'home'} onHome={goHome}>
-          {entity && reportUrl && step?.viewer === 'card' ? (
+          {route.id === 'studio' ? (
+            <Suspense fallback={<div className="report-loading">Opening Studio…</div>}><StudioBoard call={studioCall} subscribe={studioSubscribe} onOpenChat={openChat} /></Suspense>
+          ) : entity && reportUrl && step?.viewer === 'card' ? (
             <Suspense fallback={<div className="report-loading">Opening card…</div>}><EditableCard key={`${entity.id}:${stepIndex}`} url={reportUrl} entityId={entity.id} step={stepIndex} /></Suspense>
           ) : entity && reportUrl && step?.viewer === 'compare3d' ? (
             <Suspense fallback={<div className="boot"><MakLogo size={56} animated={false} /></div>}><Compare3D

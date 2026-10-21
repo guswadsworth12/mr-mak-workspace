@@ -136,3 +136,5 @@
 .mobile-pull-refresh.ready, .mobile-pull-refresh.refreshing { color: var(--m-accent); border-color: #896076; }
 .mobile-pull-refresh.refreshing svg { animation: mobile-pull-spin .8s linear infinite; }
 @keyframes mobile-pull-spin { to { transform: rotate(360deg); } }
+
+.mobile-studio { overflow-y: auto; height: 100%; -webkit-overflow-scrolling: touch; }

@@ -33,6 +33,7 @@ import { rewindToMessage } from './message-edit.mjs';
 import { LocalReadAloud } from './local-read-aloud.mjs';
 import { Handoffs } from './handoff.mjs';
 import { chatCommands } from './chat-commands.mjs';
+import { StudioManager } from './studio/manager.mjs';
 
 const listen = server => new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)); });
 
@@ -174,6 +175,9 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
       send(ws, 'output', output);
     }
   });
+  const studio = await new StudioManager({ repo, sessions, settings: () => settings, saveSettings, env: environment, mobileOrigin: () => mobile?.status().origin || '' }).init();
+  studio.on('changed', value => { broadcast('studio', value); mobile?.broadcast({ type: 'studio', ...value }); });
+  studio.on('error', error => broadcast('service-error', { error: publicError(error) }));
   sessions.on('notice', notice => { notices.push(notice); if (notices.length > 100) notices.shift(); broadcast('notice', { notice }); if (notice.kind === 'turn-completed' || notice.kind === 'exit') integrations.publish('completion', notice).catch(() => {}); });
 
   const contentServer = http.createServer(async (request, response) => {
@@ -394,6 +398,22 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           const file = await realpath(path.resolve(data.path));
           native({ type: 'reveal', path: file }); return json(response, 200, { requested: true });
         }
+        if (url.pathname.startsWith('/api/studio')) {
+          const project = url.searchParams.get('project') || data.project;
+          if (method === 'GET' && url.pathname === '/api/studio') return json(response, 200, await studio.list());
+          if (method === 'GET' && url.pathname === '/api/studio/state') return json(response, 200, await studio.state(project));
+          if (method === 'GET' && url.pathname === '/api/studio/detail') return json(response, 200, await studio.detail(project, url.searchParams.get('kind'), url.searchParams.get('id')));
+          if (method === 'POST' && url.pathname === '/api/studio/projects') return json(response, 200, await studio.addProject(data.path, { create: data.create !== false, name: data.name }));
+          if (method === 'POST' && url.pathname === '/api/studio/projects/remove') return json(response, 200, await studio.removeProject(project));
+          if (method === 'POST' && url.pathname === '/api/studio/decide') return json(response, 200, await studio.decide(project, data.gate, data.decision, data.note));
+          if (method === 'POST' && url.pathname === '/api/studio/autopilot') return json(response, 200, await studio.setAutopilot(project, data));
+          if (method === 'POST' && url.pathname === '/api/studio/tasks') return json(response, 201, await studio.createTask(project, data));
+          if (method === 'POST' && url.pathname === '/api/studio/task') return json(response, 200, await studio.setTask(project, data.id, data));
+          if (method === 'POST' && url.pathname === '/api/studio/goal') { const result = await studio.goal(project, data.text); focus(result.chat.id); return json(response, 201, result); }
+          if (method === 'POST' && url.pathname === '/api/studio/start') { const chat = await studio.start(project, data.id); focus(chat.id); return json(response, 200, chat); }
+          if (method === 'POST' && url.pathname === '/api/studio/digest') return json(response, 200, await studio.digest(project));
+          throw Object.assign(new Error('Studio action not found'), { status: 404 });
+        }
         if (method === 'POST' && url.pathname === '/api/coordinator') return json(response, 200, await askMak(data));
         if (method === 'POST' && url.pathname === '/api/coordinator/prepare') { await coordinator.start(); return json(response, 200, { ready: true, model: coordinator.model }); }
         if (method === 'POST' && url.pathname === '/api/live/transcript') {
@@ -441,7 +461,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   });
   const origin = await listen(server);
   files.uiOrigin = origin;
-  mobile = await new MobileGateway({ ...mobileOptions, transcripts, readAloud, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
+  mobile = await new MobileGateway({ ...mobileOptions, transcripts, readAloud, dictation, chooseDictation, repo, uiDir, stateDir, sessions, attachments, closeChat, studio, settings: () => settings, changed: state => broadcast('mobile-state', { mobile: state }) }).init();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url, origin);
@@ -478,12 +498,12 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
   try { watcher = watch(path.join(repo, 'workspace', 'workspace.json'), () => broadcast('workspace-changed', {})); watcher.on('error', () => {}); } catch { /* Registry may be created after first setup. */ }
   const restoreTimer = restoreSessions ? setTimeout(() => sessions.restore().catch(error => sessions.emit('service-error', error)), 100) : null;
   return {
-    origin, contentOrigin: files.origin, token, sessions, coordinator, quick, workspace, cards, files, projects, knowledge, integrations, mobile,
+    origin, contentOrigin: files.origin, token, sessions, studio, coordinator, quick, workspace, cards, files, projects, knowledge, integrations, mobile,
     urls: { workspace: `${origin}/?desktop=1&surface=workspace&token=${token}`, chats: `${origin}/?desktop=1&surface=chats&token=${token}` },
       nativeMessage: event => nativeSettings.receive(event),
       async close() {
         if (closing) return; closing = true; mcp.close(); nativeSettings.close(); await files.writes.catch(() => {});
-      watcher?.close(); clearTimeout(restoreTimer); coordinator.close(); clearTimeout(settingsTimer); await saveSettings(); await transcriptSave; await quick.saves; await workspace.writes;
+      watcher?.close(); clearTimeout(restoreTimer); coordinator.close(); studio.close(); clearTimeout(settingsTimer); await saveSettings(); await transcriptSave; await quick.saves; await workspace.writes;
       dictation.close(); await mobile.close();
       for (const ws of wss.clients) ws.terminate();
       wss.close(); await sessions.close();

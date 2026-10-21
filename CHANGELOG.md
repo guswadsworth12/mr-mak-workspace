@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (studio fork)
+
+- Add Studio: a Markdown board of tasks, gates and decisions inside a game project, with a CLI for agents (`scripts/studio/studio.mjs`), Claude Code hooks that log every action and block protected changes until the owner approves a gate, and a Studio page in Workspace and the phone app.
+- Add an autopilot that starts ready tasks in visible, grouped Claude Code chats, keeps one Godot-editor task at a time, hands finished work to QA, continues a paused chat after a gate is decided and closes finished chats into History.
+- Add ntfy phone alerts and a nightly digest. Add the `studio-protocol` and `godot-studio-dev` skills and role briefs for producer, Godot developer, art pipeline, lore keeper and QA.
+
 ## 0.5.2 - 2026-10-18
 
 - Group chat tabs with named, coloured headers. Drag or collapse a group, manage it from a tab's right-click menu, and find groups in History. Deleting a group keeps its chats. Pinned tabs retain their separate order.
