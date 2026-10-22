@@ -62,6 +62,24 @@ test('local authorization and report isolation protect the terminal service', as
   } finally { await service.close(); }
 });
 
+test('Chats can open the Workspace window on the Studio page', async () => {
+  const { service, request } = await fixture();
+  let ws;
+  try {
+    ws = new WebSocket(service.origin.replace('http:', 'ws:') + '/events', { origin: service.origin });
+    const messages = [];
+    ws.on('message', raw => messages.push(JSON.parse(raw.toString())));
+    await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+    ws.send(JSON.stringify({ type: 'auth', token: service.token, clientId: 'test-client' }));
+    await until(() => messages.some(item => item.type === 'connected'));
+    assert.equal((await request('/window', { window: 'workspace', action: 'show', route: '#/studio' })).status, 200);
+    await until(() => messages.some(item => item.type === 'navigate' && item.window === 'workspace' && item.route === '#/studio'));
+    assert.equal((await request('/window', { window: 'workspace', action: 'show', route: 'javascript:alert(1)' })).status, 200);
+    await sleep(100);
+    assert.ok(!messages.some(item => item.type === 'navigate' && item.route === 'javascript:alert(1)'), 'only in-app routes are followed');
+  } finally { ws?.close(); await service.close(); }
+});
+
 test('real PTY supports Unicode, reconnect snapshots, resizing, exit and saved history', { timeout: 30000 }, async () => {
   const { service, request, repo } = await fixture();
   let ws;

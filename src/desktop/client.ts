@@ -86,7 +86,7 @@ export function selectChat(id: string) {
   update({ selectedId: id }); sendEvent({ type: 'selected', id })
   localStorage.setItem('mrmak.selectedChat', id)
 }
-export const windowAction = (window: 'workspace' | 'chats', action = 'show', value?: boolean) => api('/window', { window, action, value }).catch(reportError)
+export const windowAction = (window: 'workspace' | 'chats', action = 'show', value?: boolean, route?: string) => api('/window', { window, action, value, route }).catch(reportError)
 
 export async function startDesktop() {
   if (started) return

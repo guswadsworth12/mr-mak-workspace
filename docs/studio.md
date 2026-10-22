@@ -13,14 +13,15 @@ folder, which you can open in Obsidian.
 | `studio/` in your game project | The board: `tasks/`, `gates/`, `decisions/`, `canon/`, `log/`, `digests/`, `roles/`. Godot ignores it (`.gdignore`). |
 | Studio CLI (`scripts/studio/studio.mjs`) | How agents and you change the board. `node scripts/studio/studio.mjs help`. |
 | Claude Code hooks (`.claude/settings.local.json` in the project) | Log every edit, command and MCP call to `studio/log/`, block protected actions without an approved gate, and brief each new session on the board. |
-| Studio page (Workspace → Studio, phone → Studio icon) | Gates to decide, the board, the live activity feed, your decisions, and the autopilot switch. |
+| Studio page (the Studio button in the Chats header, Workspace menu → Studio, phone → Studio icon) | Gates to decide, the board, the live activity feed, your decisions, and the autopilot switch. |
 | Autopilot | Starts ready tasks in titled chats grouped under "Studio · <game>", one Godot-editor task at a time, hands finished work to a QA chat, continues a paused chat after you decide its gate, and closes idle finished chats (they stay in History). |
 | Phone alerts (ntfy) | A push when a gate opens, an agent waits on you, or something finishes or blocks. Tapping it opens the Studio view on the phone app. |
 | Daily digest | `studio/digests/<date>.md` each evening: waiting on you, finished, decided, in progress, blocked, up next. |
 
 ## Set up a game
 
-1. In Mr. Mak, open Workspace → **Studio**, paste the folder that contains
+1. In Mr. Mak, press the **Studio** button in the Chats header (or open the
+   Workspace menu → **Studio**), paste the folder that contains
    `project.godot`, and choose **Add project**. Or run
    `node scripts/studio/studio.mjs init /path/to/game` once.
 2. Fill in `studio/canon/` with what is already decided (pillars, art

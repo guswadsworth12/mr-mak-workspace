@@ -392,6 +392,8 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
         }
         if (method === 'POST' && url.pathname === '/api/window') {
           if (!['chats', 'workspace'].includes(data.window) || !['show', 'hide', 'minimize', 'pin'].includes(data.action)) throw new Error('Unknown window action');
+          // Chats can open Workspace on a page, such as Studio.
+          if (data.window === 'workspace' && data.action === 'show' && typeof data.route === 'string' && /^#\/[\w-]{0,80}$/.test(data.route)) { show('workspace', { route: data.route }); return json(response, 200, { requested: true }); }
           native({ type: 'window', action: data.action, window: data.window, value: !!data.value }); return json(response, 200, { requested: true });
         }
         if (method === 'POST' && url.pathname === '/api/reveal') {
