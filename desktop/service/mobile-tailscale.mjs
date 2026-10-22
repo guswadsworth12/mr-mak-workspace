@@ -46,7 +46,8 @@ export class TailscaleTransport {
     if (config.AllowFunnel?.[`${status.hostname}:${port}`]) throw new Error('This Tailscale port is publicly shared. Turn off Funnel for this port before connecting Mr. Mak.');
     try { await this.command(['serve', '--bg', '--yes', `--https=${port}`, target]); }
     catch {
-      const hint = process.platform === 'win32' ? ' Windows may require an administrator terminal for the initial Serve setup.' : process.platform === 'darwin' ? ' Make sure the Tailscale app is running and signed in.' : '';
+      // On Linux tailscaled runs as root and refuses Serve changes from a user who is not its operator.
+      const hint = process.platform === 'win32' ? ' Windows may require an administrator terminal for the initial Serve setup.' : process.platform === 'darwin' ? ' Make sure the Tailscale app is running and signed in.' : ' On Linux, allow your user to manage Tailscale once with: sudo tailscale set --operator=$USER';
       throw new Error(`Tailscale Serve could not start. Enable HTTPS for this device in Tailscale and check its Serve permissions.${hint} See the setup instructions below.`);
     }
     const saved = { port, hostname: status.hostname, target };

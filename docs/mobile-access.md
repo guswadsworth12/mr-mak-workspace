@@ -14,6 +14,8 @@ start an installed agent, and read Workspace reports.
    follow its [Serve setup](https://tailscale.com/docs/features/tailscale-serve)
    and try again. On Windows, Tailscale may require administrator permission
    to configure Serve. You do not need to run agent chats as administrator.
+   On Linux, Tailscale accepts Serve changes only from its operator; run
+   `sudo tailscale set --operator=$USER` once, then try again.
 4. Open your phone camera or QR scanner and point it at the code on the computer
    screen. Tap the detected link to open your browser. Name the device and
    select **Request connection**.

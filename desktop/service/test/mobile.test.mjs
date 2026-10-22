@@ -275,6 +275,7 @@ test('a Tailscale Serve failure gives advice for this operating system only', as
   assert.match(error.message, /Enable HTTPS for this device/);
   assert.equal(/Windows/.test(error.message), process.platform === 'win32');
   assert.equal(/Tailscale app is running/.test(error.message), process.platform === 'darwin');
+  assert.equal(/sudo tailscale set --operator=\$USER/.test(error.message), process.platform === 'linux');
 });
 
 
