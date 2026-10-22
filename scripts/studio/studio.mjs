@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Board, GATE_KINDS, OWNER_ACTOR, ROLES, STATUSES } from '../../desktop/service/studio/board.mjs';
 import { initStudio, installHooks } from '../../desktop/service/studio/setup.mjs';
-import { notification, postTool, preTool, sessionStart, subagentStop } from '../../desktop/service/studio/guard.mjs';
+import { blocked, notification, postTool, preTool, sessionStart, subagentStop } from '../../desktop/service/studio/guard.mjs';
 
 const CLI = fileURLToPath(import.meta.url);
 
@@ -70,7 +70,13 @@ async function runHook(event) {
   const studio = Board.open(input.cwd || process.cwd());
   if (!studio) return;
   try {
-    if (event === 'pre') { const result = await preTool(studio, input); if (result) out(result); return; }
+    if (event === 'pre') {
+      const result = await preTool(studio, input);
+      if (!result) return;
+      out(result);
+      await blocked(studio, input, result).catch(() => {}); // The denial stands even if logging fails.
+      return;
+    }
     if (event === 'post') return await postTool(studio, input);
     if (event === 'session') return out(await sessionStart(studio, input, CLI));
     if (event === 'notification') return await notification(studio, input);

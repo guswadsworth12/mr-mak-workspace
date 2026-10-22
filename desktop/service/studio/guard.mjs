@@ -45,10 +45,12 @@ export function segmentsOf(command) {
     .filter(Boolean);
 }
 
+// A subagent's tool calls carry its parent's session_id plus its own
+// agent_type, so delegated work is logged as "godot-dev/general-purpose".
 export function actorFor(board, input) {
   const bound = input.session_id ? board.sessionMap()[input.session_id] : null;
-  const role = bound?.role || input.agent_type || 'claude';
-  return { actor: role, task: bound?.task || null };
+  const role = bound?.role || 'claude';
+  return { actor: input.agent_type ? `${role}/${input.agent_type}` : role, task: bound?.task || null };
 }
 
 // symbolic-ref also names the branch of a repository with no commits yet,
@@ -165,6 +167,19 @@ function describe(board, input) {
   return { kind: 'tool', text: tool };
 }
 
+// A denied call never reaches PostToolUse, so the attempt is recorded here.
+export async function blocked(board, input, result) {
+  const tool = String(input.tool_name || '');
+  const args = input.tool_input || {};
+  const file = args.file_path || args.notebook_path;
+  const what = tool === 'Bash' ? `$ ${short(args.command, 140)}`
+    : tool.startsWith('mcp__') ? tool.split('__').slice(1).join('.')
+    : `${tool}${file ? ` ${projectPath(board, file, input.cwd)}` : ''}`;
+  const reason = short(String(result?.hookSpecificOutput?.permissionDecisionReason || '').split(/(?<=\.)\s/)[0], 160);
+  const { actor, task } = actorFor(board, input);
+  await board.activity({ actor, task, kind: 'blocked', text: `${what} — ${reason}` });
+}
+
 export async function postTool(board, input) {
   const entry = describe(board, input);
   if (!entry) return;
@@ -181,7 +196,7 @@ export async function notification(board, input) {
 
 export async function subagentStop(board, input) {
   const { actor, task } = actorFor(board, input);
-  await board.activity({ actor: input.agent_type || actor, task, kind: 'agent', text: `${input.agent_type || 'subagent'} finished` });
+  await board.activity({ actor, task, kind: 'agent', text: `${input.agent_type || 'subagent'} finished` });
 }
 
 export async function sessionStart(board, input, cli) {

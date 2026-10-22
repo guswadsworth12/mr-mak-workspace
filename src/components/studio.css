@@ -78,6 +78,7 @@
 .studio-feed .feed-attention span:last-child { color: var(--amber); }
 .studio-feed .feed-decision span:last-child { color: var(--green); }
 .studio-feed .feed-gate span:last-child { color: var(--pink); }
+.studio-feed .feed-blocked span:last-child { color: var(--red); }
 .studio-decisions { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
 
 .studio-empty { max-width: 640px; margin: 40px auto; display: flex; flex-direction: column; gap: 14px; }

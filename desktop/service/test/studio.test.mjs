@@ -159,6 +159,26 @@ test('the activity log records writes hidden in read-only-looking or chained com
   assert.deepEqual(logged, ['$ echo "extends Node" > scenes/player.gd', '$ find . -name "*.import" -delete', '$ git branch -D old', '$ git commit -am wip && node /x/scripts/studio/studio.mjs task note T-0001 committed', '$ cat a | tee b']);
 });
 
+test('hooks read real Claude Code payloads: bound sessions, subagents and blocked attempts', async () => {
+  const { folder, board } = await project('studio-payload-');
+  const sessionId = 'a0612196-7fa5-4069-a1d8-fb182c634098';
+  await board.bindSession(sessionId, { task: 'T-0001', role: 'godot-dev', chat: 'chat-1' });
+  // Field shapes captured from Claude Code 2.x hook input (PreToolUse/PostToolUse/SubagentStop).
+  const base = { session_id: sessionId, transcript_path: '/tmp/t.jsonl', cwd: folder, permission_mode: 'acceptEdits', effort: { level: 'medium' }, prompt_id: 'p-1' };
+  const hook = (event, payload) => execFileSync('node', [path.join(root, 'scripts/studio/studio.mjs'), 'hook', event], { input: JSON.stringify(payload), encoding: 'utf8' });
+
+  hook('post', { ...base, hook_event_name: 'PostToolUse', tool_name: 'Write', tool_input: { file_path: path.join(folder, 'notes/main.md'), content: 'main' }, tool_response: { type: 'create' }, tool_use_id: 'toolu_1' });
+  hook('post', { ...base, hook_event_name: 'PostToolUse', agent_id: 'a1dad69ad93b695f2', agent_type: 'general-purpose', tool_name: 'Write', tool_input: { file_path: path.join(folder, 'notes/sub.md'), content: 'sub' }, tool_use_id: 'toolu_2' });
+  hook('subagent-stop', { ...base, hook_event_name: 'SubagentStop', agent_id: 'a1dad69ad93b695f2', agent_type: 'general-purpose', stop_hook_active: false });
+  const output = JSON.parse(hook('pre', { ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: "git commit --allow-empty -m 'hook test'" }, tool_use_id: 'toolu_3' }));
+  assert.equal(output.hookSpecificOutput.permissionDecision, 'deny');
+
+  const events = (await board.recentActivity()).reverse().filter(item => item.kind !== 'setup');
+  assert.deepEqual(events.map(item => [item.actor, item.task, item.kind]), [
+    ['godot-dev', 'T-0001', 'tool'], ['godot-dev/general-purpose', 'T-0001', 'tool'], ['godot-dev/general-purpose', 'T-0001', 'agent'], ['godot-dev', 'T-0001', 'blocked']]);
+  assert.equal(events[3].text, "$ git commit --allow-empty -m 'hook test' — Do not commit on main.");
+});
+
 test('the autopilot runs tasks in visible chats, one engine task at a time', async () => {
   const { folder, board } = await project('studio-auto-');
   const bin = path.join(folder, '.bin');
