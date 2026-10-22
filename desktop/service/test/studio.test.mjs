@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Board, formatDoc, parseDoc } from '../studio/board.mjs';
-import { preTool, postTool } from '../studio/guard.mjs';
+import { preTool, postTool, segmentsOf } from '../studio/guard.mjs';
 import { initStudio } from '../studio/setup.mjs';
 import { StudioManager } from '../studio/manager.mjs';
 import { Sessions } from '../sessions.mjs';
@@ -83,8 +83,9 @@ test('the guard blocks protected actions until Scott approves the matching gate'
   assert.equal(await edit('scenes/player.gd'), null);
   assert.ok(denied(await preTool(board, { cwd: folder, tool_name: 'mcp__godot-mcp-pro__export_project', tool_input: {} })));
 
-  const canon = await board.openGate({ kind: 'canon', title: 'World rules', paths: ['studio/canon/world.md'] });
-  const merge = await board.openGate({ kind: 'merge', title: 'Merge dev', branch: 'dev' });
+  const work = await board.createTask({ title: 'World pass', role: 'lore-keeper', status: 'doing' });
+  const canon = await board.openGate({ kind: 'canon', task: work.id, title: 'World rules', paths: ['studio/canon/world.md'] });
+  const merge = await board.openGate({ kind: 'merge', task: work.id, title: 'Merge dev', branch: 'dev' });
   await board.decideGate(canon.id, 'approve');
   await board.decideGate(merge.id, 'approve');
   assert.equal(await edit('studio/canon/world.md'), null);
@@ -96,6 +97,66 @@ test('the guard blocks protected actions until Scott approves the matching gate'
   await postTool(board, { cwd: folder, tool_name: 'Read', tool_input: { file_path: path.join(folder, 'scenes/dash.gd') } });
   const tools = (await board.recentActivity()).filter(item => item.kind === 'tool');
   assert.deepEqual(tools.map(item => item.text), ['wrote scenes/dash.gd']);
+});
+
+test('the guard protects its own records, settings and code, and its git rules see through wrappers', async () => {
+  const { folder, board } = await project('studio-guard-');
+  const bash = command => preTool(board, { cwd: folder, tool_name: 'Bash', tool_input: { command } });
+  const edit = file => preTool(board, { cwd: folder, tool_name: 'Write', tool_input: { file_path: path.isAbsolute(file) ? file : path.join(folder, file), content: 'x' } });
+  const denied = result => result?.hookSpecificOutput?.permissionDecision === 'deny';
+
+  // Records, hook settings and Studio's own code.
+  for (const file of ['studio/log/2026-10-22.md', 'studio/log/activity.jsonl', 'studio/.runtime/sessions.json', '.claude/settings.local.json', '.claude/settings.json',
+    path.join(root, 'desktop/service/studio/guard.mjs'), path.join(root, 'scripts/studio/studio.mjs')]) assert.ok(denied(await edit(file)), file);
+  assert.equal(await edit('studio/tasks/T-0001-x.md'), null, 'task notes stay editable');
+  assert.equal(await edit('studio/drafts/world.md'), null);
+  assert.equal(await edit(path.join(root, 'docs/notes.md')), null, 'other files outside the project are not the guard\'s business');
+  for (const command of ['echo "{}" > .claude/settings.local.json', 'sed -i s/pre/x/ .claude/settings.local.json', `cp /tmp/x ${root}/desktop/service/studio/guard.mjs`,
+    'printf x >> studio/log/activity.jsonl', 'node -e "require(\'fs\').writeFileSync(\'studio/gates/G-0001-x.md\', \'\')"', 'cd studio/gates && echo approved > G-0001-x.md',
+    'node -e "import(\'./board.mjs\').then(m => m.decideGate)"']) assert.ok(denied(await bash(command)), command);
+  assert.equal(await bash(`node "${root}/scripts/studio/studio.mjs" task note T-0001 "moved the > check" 2>&1`), null, 'the CLI itself is fine');
+  assert.equal(await bash('cat studio/log/activity.jsonl | tail -5'), null, 'reading records is fine');
+
+  // Git rules apply through wrappers, full paths and refspecs.
+  for (const command of ['bash -c "git checkout main && git merge dev"', '/usr/bin/git commit -am wip', 'env GIT_TRACE=0 git commit -am wip', '(git commit -am wip)',
+    'git switch -c dev && git push origin dev:refs/heads/main', 'git switch -c dev && git push origin dev:main', 'git switch -c dev && git push --all origin',
+    'git switch -c dev && git push origin +dev:main']) assert.ok(denied(await bash(command)), command);
+  const fresh = await mkdtemp(path.join(root, '.cache', 'studio-unborn-'));
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: fresh });
+  assert.ok(denied(await preTool(board, { cwd: fresh, tool_name: 'Bash', tool_input: { command: 'git commit -am first' } })), 'a repository without commits is still on main');
+  assert.deepEqual(segmentsOf('sh -c \'git add . && git commit -m x\' || true'), ['git add .', 'git commit -m x', 'true']);
+});
+
+test('a gate allows only what it names, and only while its task is open', async () => {
+  const { folder, board } = await project('studio-gates-');
+  const denied = result => result?.hookSpecificOutput?.permissionDecision === 'deny';
+  const mcp = name => preTool(board, { cwd: folder, tool_name: `mcp__godot-mcp-pro__${name}`, tool_input: {} });
+  const bash = command => preTool(board, { cwd: folder, tool_name: 'Bash', tool_input: { command } });
+
+  await assert.rejects(board.openGate({ kind: 'merge', title: 'Merge dev', branch: 'dev' }), /must name its task/);
+  await assert.rejects(board.openGate({ kind: 'canon', title: 'World', paths: ['studio/canon/world.md'] }), /must name its task/);
+  const task = await board.createTask({ title: 'Ship demo', role: 'godot-dev', status: 'doing' });
+  await assert.rejects(board.openGate({ kind: 'release', task: task.id, title: 'Export' }), /--tools/);
+
+  assert.ok(denied(await mcp('execute_editor_script')), 'arbitrary editor scripts are gated by default');
+  const release = await board.openGate({ kind: 'release', task: task.id, title: 'Export demo', tools: ['export_project'] });
+  assert.deepEqual((await board.gate(release.id)).tools, ['export_project']);
+  await board.decideGate(release.id, 'approve');
+  assert.equal(await mcp('export_project'), null);
+  assert.ok(denied(await mcp('delete_scene')), 'an export approval does not allow deleting scenes');
+  assert.ok(denied(await bash('git push origin main')), 'a release gate is not a merge gate');
+
+  await board.updateTask(task.id, { status: 'cancelled' });
+  assert.ok(denied(await mcp('export_project')), 'the approval ends with its task');
+});
+
+test('the activity log records writes hidden in read-only-looking or chained commands', async () => {
+  const { folder, board } = await project('studio-log-');
+  const run = command => postTool(board, { cwd: folder, tool_name: 'Bash', tool_input: { command } });
+  for (const command of ['ls -la', 'git status && git log -3', 'cat a.gd 2>/dev/null | head', 'node /x/scripts/studio/studio.mjs task note T-0001 hi', 'grep -rn dash scenes 2>&1']) await run(command);
+  for (const command of ['echo "extends Node" > scenes/player.gd', 'find . -name "*.import" -delete', 'git branch -D old', 'git commit -am wip && node /x/scripts/studio/studio.mjs task note T-0001 committed', 'cat a | tee b']) await run(command);
+  const logged = (await board.recentActivity()).filter(item => item.kind === 'tool').map(item => item.text).reverse();
+  assert.deepEqual(logged, ['$ echo "extends Node" > scenes/player.gd', '$ find . -name "*.import" -delete', '$ git branch -D old', '$ git commit -am wip && node /x/scripts/studio/studio.mjs task note T-0001 committed', '$ cat a | tee b']);
 });
 
 test('the autopilot runs tasks in visible chats, one engine task at a time', async () => {

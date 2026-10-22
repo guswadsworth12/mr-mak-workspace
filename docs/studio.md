@@ -57,12 +57,22 @@ folder, which you can open in Obsidian.
 | Action | Needs |
 | --- | --- |
 | Deciding a gate, editing `gates/`, `decisions/`, `studio.json` | You only |
+| Editing the activity log (`log/`), `studio/.runtime/`, the project's `.claude/settings*.json` (where the hooks live) or Studio's own code | Not allowed for agents |
 | Editing files under `studio/canon/` (or other `gatedPaths`) | An approved canon/design/art gate listing those paths |
 | Committing on `main`/`master` | Not allowed; agents use the work branch (`dev`) |
 | Pushing to, merging into or rebasing a protected branch, `gh pr merge` | An approved merge gate (for that branch) |
-| `export_project`, `deploy_to_android`, `delete_scene` MCP tools | An approved release gate |
+| `export_project`, `deploy_to_android`, `delete_scene`, `execute_editor_script` MCP tools | An approved release gate that lists that tool (`--tools`) |
 
-Approved gates close when their task is done. The hooks only apply to Claude
+Merge, release and canon gates must name a task, and an approval lasts only
+while that task is open: it ends when the task is done or cancelled.
+`execute_editor_script` is gated because it runs any GDScript in the editor
+and could export, delete or rewrite files; remove it from `gatedMcpTools` in
+`studio.json` if the asking gets in the way.
+
+The guard is a tripwire, not a sandbox. It stops the direct routes (including
+`bash -c`, full paths to `git`, refspecs like `dev:main`, and `node -e`
+writes to records), but an agent determined to get around it could write a
+script that does. Every command it runs is still in the log. The hooks only apply to Claude
 Code sessions started in that project; Codex workers are logged by the
 autopilot but not guarded, so Studio uses Claude by default.
 
@@ -74,6 +84,7 @@ studio task new --title "..." --role godot-dev --status ready --goal "..." --acc
 studio task list [--status ready]
 studio task start|note|done|qa|set ...
 studio gate open --kind design --task T-0007 --title "..." --summary "..." --options "..." --recommend "..."
+studio gate open --kind release --task T-0009 --tools export_project --title "Export the demo" --summary "..."
 studio gate list --pending
 studio gate decide G-0003 approve|changes|reject --note "..."
 studio digest --print

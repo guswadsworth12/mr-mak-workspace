@@ -28,13 +28,15 @@ export const DEFAULT_CONFIG = {
   },
   git: { protected: ['main', 'master'], workBranch: 'dev', blockCommitsOnProtected: true },
   gatedPaths: ['studio/canon/'],
-  gatedMcpTools: ['export_project', 'deploy_to_android', 'delete_scene'],
+  // execute_editor_script runs arbitrary GDScript in the editor, so it can do
+  // anything the other gated tools do.
+  gatedMcpTools: ['export_project', 'deploy_to_android', 'delete_scene', 'execute_editor_script'],
   digestHour: 21,
 };
 
 // ---------------------------------------------------------------- frontmatter
 
-const KEY_ORDER = ['id', 'title', 'status', 'kind', 'role', 'task', 'goal', 'plan', 'depends', 'blocked_on', 'paths', 'branch', 'chat', 'requested_by', 'decided_by', 'decision', 'gate', 'notified', 'closed', 'created', 'updated', 'decided'];
+const KEY_ORDER = ['id', 'title', 'status', 'kind', 'role', 'task', 'goal', 'plan', 'depends', 'blocked_on', 'paths', 'tools', 'branch', 'chat', 'requested_by', 'decided_by', 'decision', 'gate', 'notified', 'closed', 'created', 'updated', 'decided'];
 
 function unquote(value) {
   if (/^".*"$/.test(value)) { try { return JSON.parse(value); } catch { return value.slice(1, -1); } }
@@ -300,10 +302,13 @@ export class Board {
 
   // ------------------------------------------------------------ gates
 
-  async openGate({ kind, task = null, title, summary = '', options = '', recommendation = '', paths = [], branch = null, by = 'agent' }) {
+  async openGate({ kind, task = null, title, summary = '', options = '', recommendation = '', paths = [], tools = [], branch = null, by = 'agent' }) {
     if (!GATE_KINDS.includes(kind)) fail(`Gate kind must be one of: ${GATE_KINDS.join(', ')}.`);
     title = oneLine(title, 120);
     if (!title) fail('A gate needs a title.');
+    // A permission gate lasts only while its task is open, so it must name one.
+    if (!task && (['merge', 'release', 'canon'].includes(kind) || paths.length)) fail(`A ${kind} gate must name its task (--task T-####); the approval ends when that task does.`);
+    if (kind === 'release' && !tools.length) fail('A release gate must list the engine tools it allows (--tools export_project,...).');
     if (task) task = (await this.task(task)).id;
     const gate = await this.locked(async () => {
       const id = await this.nextId('gates', 'G');
@@ -315,10 +320,11 @@ export class Board {
         ...(options.trim() ? ['## Options', options.trim(), ''] : []),
         ...(recommendation.trim() ? ['## Recommendation', recommendation.trim(), ''] : []),
         ...(paths.length ? ['## Covers', ...paths.map(item => `- \`${item}\``), ''] : []),
+        ...(tools.length ? ['## Allows tools', ...tools.map(item => `- \`${item}\``), ''] : []),
         ...(branch ? ['## Branch', `\`${branch}\``, ''] : []),
         '## Your decision', '_Decide in Mr. Mak (Studio), on your phone, or run `studio gate decide` yourself. Agents cannot decide gates._', '',
       ].join('\n');
-      const item = { id, title, kind, status: 'pending', task, paths: paths.length ? paths : undefined, branch: branch || undefined, requested_by: by, notified: false, created, updated: created, file: path.join(this.dirs.gates, `${id}-${slug(title)}.md`), body };
+      const item = { id, title, kind, status: 'pending', task, paths: paths.length ? paths : undefined, tools: tools.length ? tools : undefined, branch: branch || undefined, requested_by: by, notified: false, created, updated: created, file: path.join(this.dirs.gates, `${id}-${slug(title)}.md`), body };
       await mkdir(this.dirs.gates, { recursive: true });
       await this.write(item);
       return item;
@@ -371,10 +377,15 @@ export class Board {
   }
 
   // Used by the guard: an approved, still-open gate of one of these kinds
-  // that covers a path or branch.
-  async approvedGate({ kinds, file = null, branch = null }) {
-    const gates = (await this.gates()).filter(gate => gate.status === 'approved' && !gate.closed && kinds.includes(gate.kind));
+  // that covers a path, tool or branch. An approval lasts only while its task
+  // is open: a gate without a task, or whose task is done or cancelled, allows
+  // nothing.
+  async approvedGate({ kinds, file = null, tool = null, branch = null }) {
+    const tasks = new Map((await this.tasks()).map(task => [task.id, task]));
+    const live = gate => gate.task && tasks.has(gate.task) && !['done', 'cancelled'].includes(tasks.get(gate.task).status);
+    const gates = (await this.gates()).filter(gate => gate.status === 'approved' && !gate.closed && kinds.includes(gate.kind) && live(gate));
     return gates.find(gate => {
+      if (tool) return (gate.tools || []).includes(tool);
       if (file) return (gate.paths || []).some(prefix => { const rel = prefix.replace(/^\.?\//, ''); return file === rel || file.startsWith(rel.endsWith('/') ? rel : `${rel}/`) || file === rel.replace(/\/$/, ''); });
       if (branch) return !gate.branch || gate.branch === branch;
       return true;

@@ -18,8 +18,11 @@ You implement gameplay, scenes, scripts and tools in the Godot project.
 ## Stop and ask instead of guessing
 Open a gate and end your turn when the task needs a call Scott should make:
 - game feel or scope choices (`design`), look and feel (`art`), story or
-  character facts (`canon`), merging to main (`merge`), exports (`release`).
+  character facts (`canon`), merging to main (`merge`), exports, deploys,
+  deleting scenes or running `execute_editor_script` (`release`, naming the
+  tool with `--tools`).
 - `studio gate open --as godot-dev --kind design --task T-#### --title "..." --summary "..." --options "A) ... B) ..." --recommend "..."`
+- `studio gate open --as godot-dev --kind release --task T-#### --tools export_project --title "..." --summary "..."`
 
 ## Mr. Mak skills that help
 `game-ui-workflow`, `game-vfx-workflow`, `game-level-design`,

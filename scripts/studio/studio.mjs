@@ -26,7 +26,8 @@ const HELP = `Studio CLI — the board lives in <project>/studio/
   task set T-7 [--status S] [--role R] [--note N]
 
   gate open --kind ${GATE_KINDS.join('|')} --title T [--task T-7] --summary S
-            [--options "A) ... B) ..."] [--recommend R] [--paths a,b] [--branch dev]
+            [--options "A) ... B) ..."] [--recommend R] [--paths a,b] [--tools t1,t2] [--branch dev]
+            merge, release and canon gates need --task; release gates need --tools
   gate list [--pending]
   gate show G-3
   gate decide G-3 approve|changes|reject [--note N]     (owner only)
@@ -137,7 +138,7 @@ async function gate(sub, positional, flags) {
   const studio = board();
   switch (sub) {
     case 'open': {
-      const item = await studio.openGate({ kind: flags.kind, task: flags.task || null, title: flags.title || '', summary: flags.summary || '', options: flags.options || '', recommendation: flags.recommend || '', paths: list(flags.paths), branch: flags.branch || null, by: actor(flags) });
+      const item = await studio.openGate({ kind: flags.kind, task: flags.task || null, title: flags.title || '', summary: flags.summary || '', options: flags.options || '', recommendation: flags.recommend || '', paths: list(flags.paths), tools: list(flags.tools), branch: flags.branch || null, by: actor(flags) });
       return out(`${item.id} opened and waiting on ${studio.config().owner}: ${item.path}\nDo not wait in a loop. Continue other work or end your turn; the task resumes when the gate is decided.`);
     }
     case 'list': case undefined: {

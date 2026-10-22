@@ -39,7 +39,10 @@ implements it:
 | `art` | anything that sets the look: palette, style, a character's final design |
 | `canon` | story, characters, world facts, anything in `studio/canon/` (list `--paths`) |
 | `merge` | changing a protected branch (`--branch` you want merged) |
-| `release` | exports, builds for others, deleting scenes |
+| `release` | exports, Android deploys, deleting scenes, editor scripts (`--tools` you need) |
+
+Merge, release and canon gates must name your `--task`; the approval ends when
+that task is done or cancelled.
 
 `gate open --kind design --task T-#### --title "..." --summary "..." --options "A) ... B) ..." --recommend "..."`
 
@@ -50,14 +53,16 @@ autopilot continues your chat with the decision.
 
 ## Hard rules (enforced by hooks)
 
-- Never decide a gate or edit `studio/gates/`, `studio/decisions/` or
-  `studio/studio.json`.
+- Never decide a gate or edit `studio/gates/`, `studio/decisions/`,
+  `studio/studio.json`, the activity log, `studio/.runtime/`, the project's
+  `.claude/settings*.json` or Studio's own code.
 - Canon edits need an approved `canon` gate covering those exact paths. Draft
   in `studio/drafts/` first.
 - No commits on protected branches; work on the work branch (default `dev`).
   Pushing or merging into a protected branch needs an approved `merge` gate.
-- Gated engine tools (exports, Android deploys, deleting scenes) need an
-  approved `release` gate.
+- Gated engine tools (`export_project`, `deploy_to_android`, `delete_scene`,
+  `execute_editor_script`) need an approved `release` gate listing that tool:
+  `gate open --kind release --task T-#### --tools export_project ...`.
 
 If a hook denies an action, read its reason, follow it, and do not look for a
 way around it. Report the block in a task note if it stops the task.
