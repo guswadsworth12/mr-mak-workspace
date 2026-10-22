@@ -159,6 +159,17 @@ test('the activity log records writes hidden in read-only-looking or chained com
   assert.deepEqual(logged, ['$ echo "extends Node" > scenes/player.gd', '$ find . -name "*.import" -delete', '$ git branch -D old', '$ git commit -am wip && node /x/scripts/studio/studio.mjs task note T-0001 committed', '$ cat a | tee b']);
 });
 
+test('Godot MCP Pro reads and QA input stay out of the log; project changes are recorded', async () => {
+  const { folder, board } = await project('studio-mcp-');
+  const quiet = ['get_scene_tree', 'list_scripts', 'read_script', 'validate_script', 'detect_circular_dependencies', 'tilemap_get_cell', 'capture_frames',
+    'open_scene', 'set_editor_camera', 'clear_output', 'simulate_action', 'simulate_mouse_move', 'click_button_by_text', 'move_to', 'navigate_to', 'wait_for_node'];
+  const logged = ['add_node', 'update_property', 'save_scene', 'edit_script', 'tilemap_set_cell', 'move_node', 'set_project_setting', 'play_scene', 'stop_scene',
+    'run_test_scenario', 'execute_game_script', 'start_recording'];
+  for (const name of [...quiet, ...logged]) await postTool(board, { cwd: folder, session_id: 's', tool_name: `mcp__godot-mcp-pro__${name}`, tool_input: { scene_path: 'res://scenes/arena/arena.tscn' } });
+  const texts = (await board.recentActivity(200)).filter(item => item.kind === 'tool').map(item => item.text.split(' ')[0]).reverse();
+  assert.deepEqual(texts, logged.map(name => `godot-mcp-pro.${name}`));
+});
+
 test('hooks read real Claude Code payloads: bound sessions, subagents and blocked attempts', async () => {
   const { folder, board } = await project('studio-payload-');
   const sessionId = 'a0612196-7fa5-4069-a1d8-fb182c634098';

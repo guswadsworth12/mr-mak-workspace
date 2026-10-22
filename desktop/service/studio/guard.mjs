@@ -14,7 +14,10 @@ import { fileURLToPath } from 'node:url';
 
 const EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 const QUIET_TOOLS = new Set(['Read', 'Glob', 'Grep', 'LS', 'WebFetch', 'WebSearch', 'TodoWrite', 'TodoRead', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'ToolSearch', 'BashOutput', 'KillShell', 'ExitPlanMode', 'AskUserQuestion']);
-const QUIET_MCP = /__(get_|list_|read_|find_|search_|analyze_|validate_|wait_for|tilemap_get|uid_to|project_path_to|compare_|assert_|watch_|monitor_|batch_get)/;
+// MCP calls that change no project file: reads and checks, plus (for Godot MCP
+// Pro) editor view handling and the input a QA pass sends to the running game.
+// play_scene, stop_scene, test runs and game scripts stay in the log.
+const QUIET_MCP = /__(?:get_|list_|read_|find_|search_|analyze_|validate_|detect_|wait_for|tilemap_get|uid_to|project_path_to|compare_|assert_|watch_|monitor_|batch_get|capture_frames|record_frames|open_scene$|set_editor_camera$|clear_output$|set_auto_dismiss$|simulate_|click_button_by_text$|move_to$|navigate_to$)/;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Studio's own code: an agent able to edit it could turn the guard off.

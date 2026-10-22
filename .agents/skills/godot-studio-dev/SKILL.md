@@ -21,6 +21,11 @@ schedules engine tasks one by one, so do not start a second editor instance.
   edit `.tscn`/`.gd` files directly, reload the project afterwards.
 - Keep new input actions in the project's Input Map (`set_input_action`), not
   hard-coded keys.
+- `export_project`, `deploy_to_android`, `delete_scene` and
+  `execute_editor_script` are blocked without an approved release gate that
+  lists the tool (`studio.json` → `gatedMcpTools`). Use the dedicated tools
+  instead of an editor script; if only a script will do, open the gate and end
+  your turn.
 
 ## Verify before you call it done
 
