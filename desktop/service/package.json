@@ -19,5 +19,8 @@
     "qrcode": "1.5.4",
     "smol-toml": "^1.8.0",
     "ws": "^8.18.3"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
   }
 }
