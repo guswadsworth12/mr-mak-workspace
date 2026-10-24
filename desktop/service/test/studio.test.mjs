@@ -254,3 +254,15 @@ test('the autopilot runs tasks in visible chats, one engine task at a time', asy
     studio.close(); await sessions.close(); process.env.PATH = previous;
   }
 });
+
+test('a role can run on its own agent, and QA keeps the qa-tester agent', async () => {
+  const { board } = await project('studio-agent-');
+  await board.saveConfig({ roles: { 'art-pipeline': { agent: 'codex' } } });
+  const created = [];
+  const sessions = { list: () => [], create: async options => { created.push(options); return { id: `chat-${created.length}` }; } };
+  const studio = new StudioManager({ repo: root, sessions, settings: () => ({}), saveSettings: async () => {} });
+  await studio.dispatch(board, await board.createTask({ title: 'Portraits', role: 'art-pipeline', status: 'ready' }));
+  await studio.dispatch(board, await board.createTask({ title: 'Dash', role: 'godot-dev', status: 'ready' }));
+  await studio.dispatch(board, await board.createTask({ title: 'Portrait review', role: 'art-pipeline', status: 'qa' }));
+  assert.deepEqual(created.map(item => item.agent), ['codex', 'claude', 'claude']);
+});

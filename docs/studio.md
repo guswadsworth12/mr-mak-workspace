@@ -75,7 +75,11 @@ The guard is a tripwire, not a sandbox. It stops the direct routes (including
 writes to records), but an agent determined to get around it could write a
 script that does. Every command it runs is still in the log. The hooks only apply to Claude
 Code sessions started in that project; Codex workers are logged by the
-autopilot but not guarded, so Studio uses Claude by default.
+autopilot but not guarded, so Studio uses Claude by default. To run one role
+on Codex, set `"agent": "codex"` on that role in `studio.json` (for example
+`"art-pipeline": { "engine": false, "agent": "codex" }`); other roles keep
+`autopilot.agent`. QA always runs under the `qa-tester` role, so it stays on
+Claude unless you change that role too.
 
 ## CLI reference
 

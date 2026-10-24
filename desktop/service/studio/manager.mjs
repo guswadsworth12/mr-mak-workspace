@@ -200,7 +200,8 @@ export class StudioManager extends EventEmitter {
     const prefix = task.status === 'qa' ? 'QA ' : '';
     const name = ascii(`${task.id} ${prefix}${task.title}`).slice(0, 80);
     const group = `Studio · ${ascii(config.name).slice(0, 48) || 'Game'}`;
-    const agent = config.autopilot.agent === 'codex' ? 'codex' : 'claude';
+    // A role can run on its own agent (roles.<role>.agent in studio.json); otherwise the autopilot's.
+    const agent = (config.roles?.[role]?.agent || config.autopilot.agent) === 'codex' ? 'codex' : 'claude';
     const session = await this.sessions.create({
       agent, cwd: board.project, name, group, effort: config.autopilot.effort || 'high',
       bypass: this.settings().defaultBypass === true,
