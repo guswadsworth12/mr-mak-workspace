@@ -6,7 +6,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Board, DEFAULT_CONFIG, OWNER_ACTOR } from './board.mjs';
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+// The desktop app runs a bundled copy of the service with the repository as
+// its working folder, so the repository is not always three levels up.
+const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const REPO = existsSync(path.join(HERE, 'scripts', 'studio')) ? HERE : process.cwd();
 export const STUDIO_CLI = path.join(REPO, 'scripts', 'studio', 'studio.mjs');
 const TEMPLATES = path.join(REPO, 'scripts', 'studio', 'templates');
 
