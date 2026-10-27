@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import './studio.css'
@@ -13,7 +13,7 @@ export interface StudioDecision { id: string; title: string; decision: string; g
 export interface StudioEvent { at: string; actor: string; task: string | null; kind: string; text: string }
 export interface StudioState {
   project: string; root: string; notifications: boolean
-  config: { name: string; owner: string; autopilot: { enabled: boolean; maxParallel: number; autoQa: boolean; agent: string; effort: string } }
+  config: { name: string; owner: string; autopilot: { enabled: boolean; maxParallel: number; autoQa: boolean; agent: string; effort: string }; roles?: Record<string, { engine?: boolean; agent?: string | null }> }
   tasks: StudioTask[]; gates: StudioGate[]; decisions: StudioDecision[]; activity: StudioEvent[]
   counts: Record<string, number>; waiting: number
 }
@@ -93,10 +93,25 @@ function GateCard({ gate, call, project, onDone }: { gate: StudioGate; call: Cal
   )
 }
 
-function TaskCard({ task, mobile, onStart, onOpenChat }: { task: StudioTask; mobile?: boolean; onStart?: (id: string) => void; onOpenChat?: (id: string) => void }) {
+// Where a dragged task may land. Working starts it in a chat; a task whose chat
+// is still open stays out of the queue so it never gets a second agent.
+function canDrop(task: StudioTask, status: string) {
+  if (status === task.status) return false
+  const chatOpen = !!task.chatInfo?.open
+  if (status === 'doing') return !chatOpen && ['ready', 'backlog', 'blocked', 'qa'].includes(task.status)
+  if (status === 'ready' || status === 'qa') return !chatOpen
+  return true
+}
+
+function TaskCard({ task, mobile, onStart, onOpenChat, onDrag }: { task: StudioTask; mobile?: boolean; onStart?: (id: string) => void; onOpenChat?: (id: string) => void; onDrag?: (task: StudioTask | null) => void }) {
   const chat = task.chatInfo
+  const drag = !mobile && onDrag ? {
+    draggable: true,
+    onDragStart: (event: DragEvent) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', task.id); onDrag(task) },
+    onDragEnd: () => onDrag(null),
+  } : {}
   return (
-    <article className={`studio-task status-${task.status}`}>
+    <article className={`studio-task status-${task.status}${drag.draggable ? ' draggable' : ''}`} {...drag}>
       <div className="studio-task-top">
         <span className="studio-id">{task.id}</span>
         <span className={`studio-chip role-${task.role}`}>{ROLE_LABEL[task.role] || task.role}</span>
@@ -113,10 +128,45 @@ function TaskCard({ task, mobile, onStart, onOpenChat }: { task: StudioTask; mob
   )
 }
 
+const AGENT_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex' }
+
+// Which agent each role's chats start on. A role left on Default follows the
+// autopilot's agent; chats already running keep theirs.
+function AgentPicker({ config, busy, onDefault, onRole, onEvery }: { config: StudioState['config']; busy: boolean; onDefault: (agent: string) => void; onRole: (role: string, agent: string | null) => void; onEvery: (agent: string) => void }) {
+  const fallback = config.autopilot.agent === 'codex' ? 'codex' : 'claude'
+  const other = fallback === 'codex' ? 'claude' : 'codex'
+  const roles = Object.entries(config.roles ?? {})
+  const moved = roles.filter(([, value]) => value.agent && value.agent !== fallback).length
+  const options = Object.entries(AGENT_NAMES).map(([id, label]) => <option key={id} value={id}>{label}</option>)
+  return (
+    <details className="studio-agents">
+      <summary>Agents <span className="studio-meta">{AGENT_NAMES[fallback]}{moved ? ` · ${moved} ${moved === 1 ? 'role' : 'roles'} on ${AGENT_NAMES[other]}` : ' for every role'}</span></summary>
+      <div className="studio-agent-grid">
+        <label><span>Default</span>
+          <select value={fallback} disabled={busy} onChange={event => onDefault(event.target.value)}>{options}</select>
+        </label>
+        {roles.map(([role, value]) => (
+          <label key={role}><span>{role}{role === 'qa-tester' && <small> · reviews every task</small>}</span>
+            <select value={value.agent ?? ''} disabled={busy} onChange={event => onRole(role, event.target.value || null)}>
+              <option value="">Default ({AGENT_NAMES[fallback]})</option>{options}
+            </select>
+          </label>
+        ))}
+      </div>
+      <div className="studio-agent-foot">
+        <button className="studio-link" disabled={busy} onClick={() => onEvery(other)}>Use {AGENT_NAMES[other]} for every role</button>
+        <span className="studio-meta">Applies to chats started from now on. Codex chats are logged but not guarded by Studio's hooks.</span>
+      </div>
+    </details>
+  )
+}
+
 export default function StudioBoard({ call, mobile = false, subscribe, onOpenChat }: Props) {
   const [list, setList] = useState<StudioList | null>(null)
   const [project, setProject] = useState(() => remember('mrmak.studio.project'))
   const [state, setState] = useState<StudioState | null>(null)
+  const [dragging, setDragging] = useState<StudioTask | null>(null)
+  const [over, setOver] = useState('')
   const [error, setError] = useState('')
   const [goal, setGoal] = useState('')
   const [busy, setBusy] = useState(false)
@@ -160,6 +210,21 @@ export default function StudioBoard({ call, mobile = false, subscribe, onOpenCha
   const sendGoal = () => act(async () => { await call('/goal', { project, text: goal }); setGoal('') })
   const toggleAutopilot = () => act(() => call('/autopilot', { project, enabled: !state?.config.autopilot.enabled }))
   const start = (id: string) => void act(() => call('/start', { project, id }))
+  const drop = (status: string) => {
+    const task = dragging
+    setDragging(null); setOver('')
+    if (!task || !canDrop(task, status)) return
+    if (status === 'doing') start(task.id)
+    else void act(() => call('/task', { project, id: task.id, status, note: 'moved on the board' }))
+  }
+  const setDefaultAgent = (agent: string) => act(() => call('/autopilot', { project, agent }))
+  const setRoleAgent = (role: string, agent: string | null) => act(() => call('/roles', { project, roles: { [role]: { agent } } }))
+  // Every role on one agent: the default switches and roles pinned to the other agent return to it.
+  const setEveryAgent = (agent: string) => act(async () => {
+    await call('/autopilot', { project, agent })
+    const pinned = Object.entries(state?.config.roles ?? {}).filter(([, value]) => value.agent && value.agent !== agent)
+    if (pinned.length) await call('/roles', { project, roles: Object.fromEntries(pinned.map(([role]) => [role, { agent: null }])) })
+  })
   const addProject = () => act(async () => { const next = await call<StudioState>('/projects', { path: adding.trim() }); setAdding(''); setProject(next.project); remember('mrmak.studio.project', next.project) })
 
   if (list && !list.projects.length) {
@@ -197,6 +262,7 @@ export default function StudioBoard({ call, mobile = false, subscribe, onOpenCha
           <span className="studio-switch" aria-hidden="true" />Autopilot {autopilot.enabled ? 'on' : 'off'}
         </button>
       </header>
+      {!mobile && <AgentPicker config={state.config} busy={busy} onDefault={agent => void setDefaultAgent(agent)} onRole={(role, agent) => void setRoleAgent(role, agent)} onEvery={agent => void setEveryAgent(agent)} />}
       {!state.notifications && !mobile && <p className="studio-hint">Phone alerts are off. Set <code>STUDIO_NTFY_URL</code> in Mr. Mak's <code>.env</code> to get pinged when an agent needs you.</p>}
       {error && <p className="studio-error studio-pad">{error}</p>}
 
@@ -213,13 +279,20 @@ export default function StudioBoard({ call, mobile = false, subscribe, onOpenCha
       <section className="studio-section">
         <h2>Board</h2>
         <div className="studio-columns">
-          {COLUMNS.filter(column => column.status !== 'done' || showDone).map(column => {
+          {COLUMNS.filter(column => column.status !== 'done' || showDone || dragging).map(column => {
             const items = byStatus.get(column.status) ?? []
             if (mobile && !items.length) return null
+            const target = dragging ? (canDrop(dragging, column.status) ? ' drop-ok' : ' drop-no') : ''
+            const accepts = !!dragging && canDrop(dragging, column.status)
             return (
-              <div className={`studio-column col-${column.status}`} key={column.status}>
-                <h3>{column.label} <span className="studio-count">{items.length}</span></h3>
-                {items.slice(0, column.status === 'done' ? 12 : 40).map(task => <TaskCard key={task.id} task={task} mobile={mobile} onStart={start} onOpenChat={onOpenChat} />)}
+              <div
+                className={`studio-column col-${column.status}${target}${over === column.status && accepts ? ' drop-over' : ''}`} key={column.status}
+                onDragOver={accepts ? event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (over !== column.status) setOver(column.status) } : undefined}
+                onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(value => value === column.status ? '' : value) }}
+                onDrop={accepts ? event => { event.preventDefault(); drop(column.status) } : undefined}
+              >
+                <h3>{column.label} <span className="studio-count">{items.length}</span>{accepts && column.status === 'doing' && <span className="studio-meta"> · drop to start</span>}</h3>
+                {items.slice(0, column.status === 'done' ? 12 : 40).map(task => <TaskCard key={task.id} task={task} mobile={mobile} onStart={start} onOpenChat={onOpenChat} onDrag={busy ? undefined : setDragging} />)}
               </div>
             )
           })}

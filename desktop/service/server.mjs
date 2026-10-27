@@ -409,6 +409,7 @@ export async function createService({ repo, uiDir, stateDir, token = secret(), n
           if (method === 'POST' && url.pathname === '/api/studio/projects/remove') return json(response, 200, await studio.removeProject(project));
           if (method === 'POST' && url.pathname === '/api/studio/decide') return json(response, 200, await studio.decide(project, data.gate, data.decision, data.note));
           if (method === 'POST' && url.pathname === '/api/studio/autopilot') return json(response, 200, await studio.setAutopilot(project, data));
+          if (method === 'POST' && url.pathname === '/api/studio/roles') return json(response, 200, await studio.setRoles(project, data));
           if (method === 'POST' && url.pathname === '/api/studio/tasks') return json(response, 201, await studio.createTask(project, data));
           if (method === 'POST' && url.pathname === '/api/studio/task') return json(response, 200, await studio.setTask(project, data.id, data));
           if (method === 'POST' && url.pathname === '/api/studio/goal') { const result = await studio.goal(project, data.text); focus(result.chat.id); return json(response, 201, result); }

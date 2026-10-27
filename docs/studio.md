@@ -49,6 +49,10 @@ folder, which you can open in Obsidian.
 - **Turn on Autopilot** to let ready tasks start on their own, or press
   **Start now** on a task. Each worker is a chat you can open, watch and type
   into at any time.
+- **Drag a task** to another column on desktop to move it. Dropping on Working
+  starts it like Start now; Done appears while you drag. A task whose chat is
+  still open can go to Blocked, Backlog or Done, not back to Ready or QA, so it
+  never gets a second agent.
 - **Decide gates** as they come in. "Ask for changes" and "Reject" need a note,
   which the agent reads when its chat continues.
 - **Read the digest** at night, or the activity feed any time.
@@ -75,11 +79,15 @@ The guard is a tripwire, not a sandbox. It stops the direct routes (including
 writes to records), but an agent determined to get around it could write a
 script that does. Every command it runs is still in the log. The hooks only apply to Claude
 Code sessions started in that project; Codex workers are logged by the
-autopilot but not guarded, so Studio uses Claude by default. To run one role
-on Codex, set `"agent": "codex"` on that role in `studio.json` (for example
-`"art-pipeline": { "engine": false, "agent": "codex" }`); other roles keep
-`autopilot.agent`. QA always runs under the `qa-tester` role, so it stays on
-Claude unless you change that role too.
+autopilot but not guarded, so Studio uses Claude by default. Open **Agents**
+under the board's title to choose the agent per role: **Default** is
+`autopilot.agent`, and each role either follows it or is pinned to Claude or
+Codex (`roles.<role>.agent` in `studio.json`, for example
+`"art-pipeline": { "engine": false, "agent": "codex" }`). **Use Codex for every
+role** switches the default and clears pins to the other agent, which is the
+quick way to move everything over while one agent's usage limit resets. QA runs
+under the `qa-tester` role. A change applies to chats started afterwards;
+running chats keep their agent.
 
 ## CLI reference
 

@@ -266,3 +266,38 @@ test('a role can run on its own agent, and QA keeps the qa-tester agent', async 
   await studio.dispatch(board, await board.createTask({ title: 'Portrait review', role: 'art-pipeline', status: 'qa' }));
   assert.deepEqual(created.map(item => item.agent), ['codex', 'claude', 'claude']);
 });
+
+test('roles pick their agent from the board, and Default follows the autopilot', async () => {
+  const { board } = await project('studio-roles-');
+  const created = [];
+  const sessions = { list: () => [], create: async options => { created.push(options); return { id: `chat-${created.length}` }; } };
+  const studio = new StudioManager({ repo: root, sessions, settings: () => ({}), saveSettings: async () => {} });
+  studio.boards.set(path.resolve(board.project), board);
+  await studio.setRoles(board.project, { roles: { 'art-pipeline': { agent: 'codex' }, 'godot-dev': { agent: 'gpt' }, unknown: { agent: 'codex' } } });
+  assert.equal(board.config().roles['art-pipeline'].agent, 'codex');
+  assert.equal(board.config().roles['godot-dev'].agent, undefined);
+  await studio.setAutopilot(board.project, { agent: 'codex' });
+  await studio.setRoles(board.project, { roles: { 'art-pipeline': { agent: null } } });
+  await studio.dispatch(board, await board.createTask({ title: 'Dash', role: 'godot-dev', status: 'ready' }));
+  await studio.dispatch(board, await board.createTask({ title: 'Portraits', role: 'art-pipeline', status: 'ready' }));
+  assert.deepEqual(created.map(item => item.agent), ['codex', 'codex']);
+  await assert.rejects(studio.setRoles(board.project, { roles: { unknown: { agent: 'codex' } } }), /Choose a role/);
+});
+
+test('moving a task on the board never gives it a second agent', async () => {
+  const { board } = await project('studio-move-');
+  const chats = [];
+  const sessions = { list: () => chats, create: async () => { const chat = { id: `chat-${chats.length + 1}`, open: true }; chats.push(chat); return chat; } };
+  const studio = new StudioManager({ repo: root, sessions, settings: () => ({}), saveSettings: async () => {} });
+  studio.boards.set(path.resolve(board.project), board);
+  const idle = await board.createTask({ title: 'Props', role: 'art-pipeline', status: 'backlog' });
+  assert.equal((await studio.setTask(board.project, idle.id, { status: 'ready' })).status, 'ready');
+  await assert.rejects(studio.setTask(board.project, idle.id, { status: 'doing' }), /Use Start/);
+  const busy = await board.createTask({ title: 'Dash', role: 'godot-dev', status: 'ready' });
+  await studio.start(board.project, busy.id);
+  await assert.rejects(studio.setTask(board.project, busy.id, { status: 'ready' }), /open chat/);
+  assert.equal((await studio.setTask(board.project, busy.id, { status: 'blocked' })).status, 'blocked');
+  chats[0].open = false;
+  assert.equal((await studio.setTask(board.project, busy.id, { status: 'ready' })).status, 'ready');
+  assert.equal((await studio.setTask(board.project, busy.id, { status: 'done' })).status, 'done');
+});

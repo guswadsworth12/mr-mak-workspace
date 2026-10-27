@@ -119,6 +119,21 @@ export class StudioManager extends EventEmitter {
     if (allowed.enabled) setTimeout(() => this.tick().catch(() => {}), 300);
     return this.state(project);
   }
+  // Picks Claude or Codex per role; null returns a role to the autopilot's agent.
+  async setRoles(project, patch) {
+    const board = this.board(project);
+    const known = Object.keys(board.config().roles || {});
+    const roles = {};
+    for (const [role, value] of Object.entries(patch?.roles || {})) {
+      if (!known.includes(role) || !value || typeof value !== 'object') continue;
+      if (value.agent === null || ['claude', 'codex'].includes(value.agent)) roles[role] = { agent: value.agent };
+    }
+    if (!Object.keys(roles).length) fail('Choose a role and an agent.');
+    await board.saveConfig({ roles });
+    await board.activity({ actor: 'scott', kind: 'setup', text: `roles ${JSON.stringify(roles)}` });
+    this.changed(board.project);
+    return this.state(project);
+  }
   async createTask(project, data) {
     const board = this.board(project);
     const task = await board.createTask({ title: data.title, role: data.role, status: data.status === 'backlog' ? 'backlog' : 'ready', goal: data.goal || '', acceptance: data.acceptance || '', depends: Array.isArray(data.depends) ? data.depends : [], by: 'scott' });
@@ -130,7 +145,14 @@ export class StudioManager extends EventEmitter {
     const patch = {};
     if (data.status) patch.status = data.status;
     if (data.role) patch.role = data.role;
+    const before = await board.task(id);
+    // Working means a chat is on it, so Start is the way in. A task whose chat
+    // is still open would get a second agent if it went back in the queue.
+    if (patch.status === 'doing' && before.status !== 'doing') fail(`Use Start to put ${before.id} to work.`);
+    const chatOpen = before.chat && this.sessions.list().some(item => item.id === before.chat && item.open);
+    if (chatOpen && ['ready', 'qa'].includes(patch.status) && patch.status !== before.status) fail(`${before.id} still has an open chat. Close it before moving the task to ${patch.status}.`);
     const task = await board.updateTask(id, patch, { by: 'scott', note: data.note || '' });
+    if (patch.status === 'done' && before.status !== 'done') await board.closeGates(id);
     this.changed(board.project);
     return task;
   }
