@@ -4,6 +4,10 @@ import { reportThemeCSS } from '../../desktop/service/report-theme.mjs'
 
 type Props = Omit<IframeHTMLAttributes<HTMLIFrameElement>, 'src' | 'onLoad'> & { url: string; onLoad?: () => void }
 
+// Desktop reports run on their folder's own port, never on the UI's origin, so a same-origin
+// report can frame and read its own pages but cannot reach the app or another report.
+export const REPORT_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads'
+
 function ThemedFrame({ url, onLoad, ...props }: Props) {
   const { resolved } = useWorkspaceTheme()
   const frame = useRef<HTMLIFrameElement>(null)
@@ -34,7 +38,9 @@ function ThemedFrame({ url, onLoad, ...props }: Props) {
         doc.documentElement.dataset.mrmakTheme = resolved
       }
     } catch { /* Cross-origin reports use the message below. */ }
-    element.contentWindow?.postMessage({ type: 'mrmak:theme', theme: resolved }, new URL(url, location.href).origin)
+    // A desktop report runs on its folder's own port, which the UI does not track.
+    // The message only carries the theme name.
+    element.contentWindow?.postMessage({ type: 'mrmak:theme', theme: resolved }, '*')
   }, [resolved, url])
   useEffect(applyTheme, [applyTheme])
   return <iframe {...props} ref={frame} src={src} onLoad={() => { applyTheme(); onLoad?.() }} />
