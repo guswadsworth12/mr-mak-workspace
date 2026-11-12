@@ -13,6 +13,15 @@ function linkedLibraries(binary) {
   return result.stdout.split('\n').slice(1).map(line => line.trim().replace(/ \(compatibility version .*$/, '')).filter(Boolean);
 }
 const systemLibrary = file => file.startsWith('/usr/lib/') || file.startsWith('/System/Library/');
+// Linux sonames from readelf's NEEDED entries. Distribution builds (Arch,
+// CachyOS, Fedora) link shared simdjson, ICU, libuv, OpenSSL and others whose
+// sonames change on ordinary system updates, so only the C/C++ runtime counts.
+function neededLibraries(binary) {
+  const result = spawnSync('readelf', ['-d', binary], { encoding: 'utf8' });
+  if (result.status !== 0) return null;
+  return [...result.stdout.matchAll(/\(NEEDED\)\s+Shared library: \[([^\]]+)\]/g)].map(match => match[1]);
+}
+const baseLinuxLibrary = name => /^(libc|libm|libdl|libpthread|librt|libstdc\+\+|libgcc_s|libatomic)\.so(\.|$)|^ld-linux[\w.-]*\.so/.test(name);
 function minimumMacos(binary) {
   const commands = spawnSync('otool', ['-l', binary], { encoding: 'utf8' }).stdout || '';
   return commands.match(/cmd LC_BUILD_VERSION\n(?:.*\n){0,2}?\s*minos (\S+)/)?.[1]
@@ -57,16 +66,19 @@ run(['run', 'build'], repo);
 // macOS, unless every linked library is part of macOS, bundle the official
 // self-contained build of the same version instead (checksum-verified, cached
 // under .cache/node-download).
+// Linux applies the same rule to the distribution's shared libraries.
 async function portableNode() {
-  if (process.platform !== 'darwin') return process.execPath;
-  const linked = linkedLibraries(process.execPath);
-  if (linked?.length && linked.every(systemLibrary)) return process.execPath;
-  const name = `node-${process.version}-darwin-${process.arch}`;
+  if (process.platform === 'win32') return process.execPath;
+  const linux = process.platform === 'linux';
+  const linked = linux ? neededLibraries(process.execPath) : linkedLibraries(process.execPath);
+  const portable = linux ? baseLinuxLibrary : systemLibrary;
+  if (linked?.length && linked.every(portable)) return process.execPath;
+  const name = `node-${process.version}-${process.platform}-${process.arch}`;
   const cache = path.join(repo, '.cache', 'node-download');
   const binary = path.join(cache, name, 'bin', 'node');
   if (await access(binary).then(() => true, () => false)) return binary;
   const base = `https://nodejs.org/dist/${process.version}`;
-  console.warn(`[mak] ${process.execPath} is not self-contained (links ${linked?.find(file => !systemLibrary(file)) || 'unknown libraries'}); downloading ${name} from nodejs.org`);
+  console.warn(`[mak] ${process.execPath} is not self-contained (links ${linked?.find(file => !portable(file)) || 'unknown libraries'}); downloading ${name} from nodejs.org`);
   const sums = await (await fetch(`${base}/SHASUMS256.txt`)).text();
   const expected = sums.split('\n').find(line => line.endsWith(`  ${name}.tar.gz`))?.split(/\s+/)[0];
   if (!expected) throw new Error(`nodejs.org lists no ${name}.tar.gz`);
