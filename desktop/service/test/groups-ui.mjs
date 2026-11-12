@@ -45,6 +45,12 @@ try {
   assert.deepEqual(await page.locator('.chat-group-chip .chip-name').allTextContents(), ['ThugLife', 'Dungeon']);
   assert.deepEqual(await page.locator('.chat-group-chip small').allTextContents(), ['2', '1']);
 
+  // Existing project-group keyboard controls now move native named groups.
+  await chip('ThugLife').focus(); await page.keyboard.press('Alt+ArrowRight');
+  await expect.poll(names).toEqual(['Animator', 'Director', 'Network', 'Combat']);
+  await chip('ThugLife').focus(); await page.keyboard.press('Alt+ArrowLeft');
+  await expect.poll(names).toEqual(['Director', 'Network', 'Animator', 'Combat']);
+
   // Collapse hides every member except the selected one, and the choice survives a reload.
   await chip('ThugLife').click();
   await page.locator('.chat-tab-group.collapsed').waitFor();
@@ -126,6 +132,7 @@ try {
 
   // New chat offers the known groups and files the new tab under the chosen one.
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.locator('.desk-dialog summary', { hasText: /^Advanced$/ }).click();
   const picker = page.locator('.desk-dialog select[aria-label="Group"]');
   assert.deepEqual(await picker.locator('option').allTextContents(), ['No group', 'Dungeon', 'ThugLife', 'New group…']);
   await page.locator('.desk-dialog input[placeholder*="Dream Game"]').fill('Producer');
