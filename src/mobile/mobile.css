@@ -147,3 +147,5 @@
 @keyframes mobile-pull-spin { to { transform: rotate(360deg); } }
 
 .mobile-studio { overflow-y: auto; height: 100%; -webkit-overflow-scrolling: touch; }
+/* The chat bell sits between the view switch and the activity figure. */
+.mobile-chat-tools .mobile-chat-mute { flex: 0 0 38px; width: 38px; height: 32px; padding: 0; display: grid; place-items: center; color: var(--m-muted); }.mobile-chat-tools .mobile-chat-mute.muted { color: #e6c591; }
