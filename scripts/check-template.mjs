@@ -1,6 +1,7 @@
 // Distribution checks: starter content, media closure, local skills and safe defaults.
 import assert from 'node:assert/strict';
 import { readFile, readdir, stat } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCard } from '../desktop/service/card-schema.mjs';
@@ -51,7 +52,12 @@ for (const entity of entities) {
 }
 assert.equal(arachneImages.size, 158, 'All Arachne images must be reachable from the tabs.');
 assert.equal(videos.size, 8, 'Keep all eight motion studies.');
-const skillNames = (await readdir(path.join(root, '.agents/skills'), { withFileTypes: true })).filter(e => e.isDirectory()).map(e => e.name);
+// The distribution is what git tracks. Skills a user adds locally and keeps out of git (for example licensed
+// packs listed in .git/info/exclude) are theirs, not part of the template; outside a git checkout, count every folder.
+const listed = spawnSync('git', ['ls-files', '-z', '.agents/skills'], { cwd: root, encoding: 'utf8' });
+const tracked = new Set(listed.status === 0 ? listed.stdout.split('\0').map(file => file.split('/')[2]).filter(Boolean) : []);
+const skillNames = (await readdir(path.join(root, '.agents/skills'), { withFileTypes: true }))
+  .filter(e => e.isDirectory() && (!tracked.size || tracked.has(e.name))).map(e => e.name);
 assert.equal(skillNames.length, 22);
 for (const name of ['studio-protocol', 'godot-studio-dev']) assert.ok(skillNames.includes(name), `Missing Studio skill: ${name}`);
 for (const name of ['game-vfx-workflow', 'game-ui-workflow', 'game-animation-integration', 'game-level-design', 'game-audio-workflow', 'gameplay-visual-review']) {
